@@ -1,5 +1,6 @@
 import { DataTable } from "@/components/DataTable";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -24,7 +25,7 @@ import type {
   Role,
 } from "@workos/frontend-take-home-server/src/models";
 import { EllipsisVerticalIcon, PlusIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 const RenameRoleDialog = ({
@@ -40,22 +41,14 @@ const RenameRoleDialog = ({
   onSubmit: (name: string, description?: string) => void;
   isLoading?: boolean;
 }) => {
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
+  const [name, setName] = useState(role?.name || "");
+  const [description, setDescription] = useState(role?.description || "");
 
-  // Update form when role changes
-  useEffect(() => {
-    if (role) {
-      setName(role.name);
-      setDescription(role.description || "");
-    }
-  }, [role]);
-
-  const handleSubmit = () => {
+  const handleSubmit = useCallback(() => {
     if (name.trim()) {
       onSubmit(name.trim(), description.trim() || undefined);
     }
-  };
+  }, [name, description, onSubmit]);
 
   if (!role) {
     return null;
@@ -125,11 +118,7 @@ const RoleCell = ({ role }: { role: Role }) => {
       <div className="flex flex-col">
         <div className="flex items-center gap-2">
           <span className="font-medium">{role.name}</span>
-          {role.isDefault && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-              Default
-            </span>
-          )}
+          {role.isDefault && <Badge variant="outline">Default</Badge>}
         </div>
         {role.description && (
           <span className="text-sm text-muted-foreground">
@@ -143,12 +132,17 @@ const RoleCell = ({ role }: { role: Role }) => {
 
 const ActionMenu = ({ onRename }: { onRename: () => void }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const onSelectItem = (item: string) => {
-    setIsOpen(false);
-    if (item === "rename") {
-      onRename();
-    }
-  };
+
+  const onSelectItem = useCallback(
+    (item: string) => {
+      setIsOpen(false);
+      if (item === "rename") {
+        onRename();
+      }
+    },
+    [onRename]
+  );
+
   return (
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
       <DropdownMenuTrigger>
@@ -171,6 +165,8 @@ export default function RolesTable() {
   const [isRenameRoleDialogOpen, setIsRenameRoleDialogOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState<Role | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const queryClient = useQueryClient();
   const {
@@ -178,9 +174,17 @@ export default function RolesTable() {
     isLoading: rolesLoading,
     error: rolesError,
   } = useQuery<PagedData<Role>>({
-    queryKey: ["roles"],
+    queryKey: ["roles", currentPage, searchQuery],
     queryFn: async () => {
-      const response = await fetch("http://localhost:3002/roles");
+      const params = new URLSearchParams();
+      params.set("page", currentPage.toString());
+      if (searchQuery) {
+        params.set("search", searchQuery);
+      }
+
+      const response = await fetch(
+        `http://localhost:3002/roles?${params.toString()}`
+      );
       if (!response.ok) {
         throw new Error("Failed to fetch roles");
       }
@@ -229,6 +233,17 @@ export default function RolesTable() {
       setSelectedRole(undefined);
     },
   });
+
+  const roles = useMemo(() => rolesResponse?.data ?? [], [rolesResponse]);
+
+  const data: RoleRow[] = useMemo(
+    () =>
+      roles.map((role) => ({
+        role,
+        created: role.createdAt,
+      })),
+    [roles]
+  );
 
   const columns: ColumnDef<RoleRow>[] = useMemo(
     () => [
@@ -287,18 +302,7 @@ export default function RolesTable() {
         enableSorting: false,
       },
     ],
-    [setSelectedRole, setIsRenameRoleDialogOpen]
-  );
-
-  const roles = useMemo(() => rolesResponse?.data ?? [], [rolesResponse]);
-
-  const data: RoleRow[] = useMemo(
-    () =>
-      roles.map((role) => ({
-        role,
-        created: role.createdAt,
-      })),
-    [roles]
+    []
   );
 
   const handleAddRole = useCallback(() => {
@@ -320,6 +324,15 @@ export default function RolesTable() {
     [selectedRole, renameRoleMutation]
   );
 
+  const handlePageChange = useCallback((page: number) => {
+    setCurrentPage(page);
+  }, []);
+
+  const handleSearchChange = useCallback((search: string) => {
+    setSearchQuery(search);
+    setCurrentPage(1);
+  }, []);
+
   return (
     <div className="py-5 flex flex-col gap-5">
       {error && (
@@ -334,7 +347,12 @@ export default function RolesTable() {
         isLoading={rolesLoading}
         error={rolesError}
         searchPlaceholder="Search roles..."
-        filterableColumns={["role"]}
+        serverSidePagination
+        currentPage={currentPage}
+        totalPages={rolesResponse?.pages ?? 1}
+        onPageChange={handlePageChange}
+        onSearchChange={handleSearchChange}
+        searchValue={searchQuery}
         filterAction={
           <Button
             onClick={handleAddRole}

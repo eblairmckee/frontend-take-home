@@ -1,3 +1,15 @@
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   type ColumnDef,
   type ColumnFiltersState,
@@ -10,18 +22,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { ArrowDownIcon, ArrowUpIcon, SearchIcon } from "lucide-react";
-import React, { useCallback } from "react";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { Skeleton } from "./ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "./ui/table";
+import React, { useCallback, useMemo } from "react";
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -29,9 +30,14 @@ interface DataTableProps<TData, TValue> {
   isLoading: boolean;
   error: Error | null;
   searchPlaceholder: string;
-  globalFilterEnabled?: boolean;
-  filterableColumns?: string[]; // Column IDs that should have individual filters
+  filterableColumns?: string[];
   filterAction?: React.ReactNode;
+  serverSidePagination?: boolean;
+  currentPage?: number;
+  totalPages?: number;
+  onPageChange?: (page: number) => void;
+  onSearchChange?: (search: string) => void;
+  searchValue?: string;
 }
 
 export function DataTable<TData, TValue>({
@@ -40,56 +46,50 @@ export function DataTable<TData, TValue>({
   isLoading,
   error,
   searchPlaceholder,
-  globalFilterEnabled = false,
   filterableColumns,
   filterAction,
+  serverSidePagination = false,
+  currentPage = 1,
+  totalPages = 1,
+  onPageChange,
+  onSearchChange,
+  searchValue,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
     []
   );
-  const [globalFilter, setGlobalFilter] = React.useState("");
 
   const table = useReactTable({
     data,
     columns,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
-    onGlobalFilterChange: setGlobalFilter,
     getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
+    getPaginationRowModel: serverSidePagination
+      ? undefined
+      : getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     state: {
       sorting,
       columnFilters,
-      globalFilter,
     },
-    globalFilterFn: globalFilterEnabled
-      ? (row, _, filterValue) => {
-          return row.getVisibleCells().some((cell) => {
-            const cellValue = cell.getValue();
-            if (cellValue == null) return false;
-            return String(cellValue)
-              .toLowerCase()
-              .includes(filterValue.toLowerCase());
-          });
-        }
-      : undefined,
     initialState: {
       pagination: {
         pageSize: 10,
       },
     },
+    manualPagination: serverSidePagination,
   });
 
   const handleFilterChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const value = event.target.value;
-      if (globalFilterEnabled) {
-        setGlobalFilter(value);
+
+      if (serverSidePagination && onSearchChange) {
+        onSearchChange(value);
       } else if (filterableColumns && filterableColumns.length > 0) {
-        // Apply the same filter value to all specified filterable columns
         const newFilters = filterableColumns.map((columnId) => ({
           id: columnId,
           value: value,
@@ -97,15 +97,41 @@ export function DataTable<TData, TValue>({
         setColumnFilters(newFilters);
       }
     },
-    [globalFilterEnabled, filterableColumns]
+    [filterableColumns, serverSidePagination, onSearchChange]
   );
+
+  const handlePreviousPage = useCallback(() => {
+    if (serverSidePagination && onPageChange) {
+      onPageChange(Math.max(1, currentPage - 1));
+    } else {
+      table.previousPage();
+    }
+  }, [serverSidePagination, onPageChange, currentPage, table]);
+
+  const handleNextPage = useCallback(() => {
+    if (serverSidePagination && onPageChange) {
+      onPageChange(Math.min(totalPages, currentPage + 1));
+    } else {
+      table.nextPage();
+    }
+  }, [serverSidePagination, onPageChange, currentPage, totalPages, table]);
+
+  const canPreviousPage = useMemo(() => {
+    return serverSidePagination ? currentPage > 1 : table.getCanPreviousPage();
+  }, [serverSidePagination, currentPage, table]);
+
+  const canNextPage = useMemo(() => {
+    return serverSidePagination
+      ? currentPage < totalPages
+      : table.getCanNextPage();
+  }, [serverSidePagination, currentPage, totalPages, table]);
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center h-48 text-center">
-        <p className="text-destructive font-medium">Error loading data</p>
-        <p className="text-muted-foreground text-sm">{error.message}</p>
-      </div>
+      <Alert variant="destructive">
+        <AlertTitle>Error loading data</AlertTitle>
+        <AlertDescription>{error.message}</AlertDescription>
+      </Alert>
     );
   }
 
@@ -115,11 +141,12 @@ export function DataTable<TData, TValue>({
         <Input
           placeholder={searchPlaceholder}
           startIcon={<SearchIcon className="w-4 h-4" />}
+          id="search-input"
           className="flex-1"
           value={
-            globalFilterEnabled
-              ? (globalFilter ?? "")
-              : ((columnFilters[0]?.value as string) ?? "")
+            serverSidePagination
+              ? (searchValue ?? "")
+              : (columnFilters[0]?.value as string)
           }
           onChange={handleFilterChange}
         />
@@ -150,8 +177,8 @@ export function DataTable<TData, TValue>({
                             <span className="text-muted-foreground">
                               {
                                 {
-                                  asc: <ArrowUpIcon />,
-                                  desc: <ArrowDownIcon />,
+                                  asc: <ArrowUpIcon className="w-4 h-4" />,
+                                  desc: <ArrowDownIcon className="w-4 h-4" />,
                                 }[header.column.getIsSorted() as string]
                               }
                             </span>
@@ -167,8 +194,10 @@ export function DataTable<TData, TValue>({
           <TableBody>
             {isLoading ? (
               Array.from({ length: 10 }).map((_, index) => (
+                // eslint-disable-next-line react/no-array-index-key
                 <TableRow key={index}>
                   {columns.map((_, colIndex) => (
+                    // eslint-disable-next-line react/no-array-index-key
                     <TableCell key={colIndex}>
                       <Skeleton className="h-6 w-1/2 my-1.5 mx-2" />
                     </TableCell>
@@ -208,16 +237,16 @@ export function DataTable<TData, TValue>({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => table.previousPage()}
-              disabled={!table.getCanPreviousPage()}
+              onClick={handlePreviousPage}
+              disabled={!canPreviousPage}
             >
               Previous
             </Button>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => table.nextPage()}
-              disabled={!table.getCanNextPage()}
+              onClick={handleNextPage}
+              disabled={!canNextPage}
             >
               Next
             </Button>

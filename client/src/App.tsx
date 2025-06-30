@@ -1,8 +1,8 @@
+import RolesTable from "@/components/feature/RolesTable";
+import UsersTable from "@/components/feature/UsersTable";
 import { Toaster } from "@/components/ui/sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import RolesTable from "./components/feature/RolesTable";
-import UsersTable from "./components/feature/UsersTable";
 
 function App() {
   const queryClient = new QueryClient();

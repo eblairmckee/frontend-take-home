@@ -7,17 +7,11 @@
     "server"
   ],
   "scripts": {
-    "dev": "bun run --parallel dev:client dev:server",
     "dev:client": "cd client && bun run dev",
     "dev:server": "cd server && bun run api",
-    "build": "cd client && bun run build",
     "build:client": "cd client && bun run build",
-    "test": "cd server && bun run test",
     "test:server": "cd server && bun run test",
-    "lint": "bun run --parallel lint:client lint:server",
-    "lint:client": "cd client && bun run lint",
-    "lint:server": "cd server && bun run lint",
-    "preview": "cd client && bun run preview"
+    "lint:client": "cd client && bun run lint"
   },
   "packageManager": "bun@1.2.17"
 }

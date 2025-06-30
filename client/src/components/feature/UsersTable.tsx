@@ -127,6 +127,8 @@ export default function UsersTable() {
   const [isDeleteUserDialogOpen, setIsDeleteUserDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const queryClient = useQueryClient();
   const {
@@ -134,15 +136,78 @@ export default function UsersTable() {
     isLoading: usersLoading,
     error: usersError,
   } = useQuery<PagedData<User>>({
-    queryKey: ["users"],
+    queryKey: ["users", currentPage, searchQuery],
     queryFn: async () => {
-      const response = await fetch("http://localhost:3002/users");
+      const params = new URLSearchParams();
+      params.set("page", currentPage.toString());
+      if (searchQuery) {
+        params.set("search", searchQuery);
+      }
+
+      const response = await fetch(
+        `http://localhost:3002/users?${params.toString()}`
+      );
       if (!response.ok) {
         throw new Error("Failed to fetch users");
       }
       return response.json();
     },
   });
+  const {
+    data: rolesResponse,
+    isLoading: rolesLoading,
+    error: rolesError,
+  } = useQuery<PagedData<Role>>({
+    queryKey: ["roles"],
+    queryFn: async () => {
+      const response = await fetch("http://localhost:3002/roles");
+      if (!response.ok) {
+        throw new Error("Failed to fetch roles");
+      }
+      return response.json();
+    },
+  });
+
+  const users = useMemo(() => usersResponse?.data ?? [], [usersResponse]);
+  const roles = useMemo(() => rolesResponse?.data ?? [], [rolesResponse]);
+
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const response = await fetch(`http://localhost:3002/users/${userId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to delete user");
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      setIsDeleteUserDialogOpen(false);
+      setSelectedUser(undefined);
+      setError(undefined);
+      toast.success("User deleted successfully");
+    },
+    onError: (error: Error) => {
+      setError(error.message);
+      setIsDeleteUserDialogOpen(false);
+      setSelectedUser(undefined);
+    },
+  });
+
+  const data: UserRow[] = useMemo(
+    () =>
+      users.map((user) => ({
+        user,
+        role:
+          roles.find((role) => role.id === user.roleId)?.name ?? "Unknown Role",
+        joined: user.createdAt,
+      })),
+    [users, roles]
+  );
 
   const columns: ColumnDef<UserRow>[] = useMemo(
     () => [
@@ -217,63 +282,7 @@ export default function UsersTable() {
         enableSorting: false,
       },
     ],
-    [setSelectedUser, setIsDeleteUserDialogOpen]
-  );
-
-  const {
-    data: rolesResponse,
-    isLoading: rolesLoading,
-    error: rolesError,
-  } = useQuery<PagedData<Role>>({
-    queryKey: ["roles"],
-    queryFn: async () => {
-      const response = await fetch("http://localhost:3002/roles");
-      if (!response.ok) {
-        throw new Error("Failed to fetch roles");
-      }
-      return response.json();
-    },
-  });
-
-  const deleteUserMutation = useMutation({
-    mutationFn: async (userId: string) => {
-      const response = await fetch(`http://localhost:3002/users/${userId}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to delete user");
-      }
-
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["users"] });
-      setIsDeleteUserDialogOpen(false);
-      setSelectedUser(undefined);
-      setError(undefined);
-      toast.success("User deleted successfully");
-    },
-    onError: (error: Error) => {
-      setError(error.message);
-      setIsDeleteUserDialogOpen(false);
-      setSelectedUser(undefined);
-    },
-  });
-
-  const users = useMemo(() => usersResponse?.data ?? [], [usersResponse]);
-  const roles = useMemo(() => rolesResponse?.data ?? [], [rolesResponse]);
-
-  const data: UserRow[] = useMemo(
-    () =>
-      users.map((user) => ({
-        user,
-        role:
-          roles.find((role) => role.id === user.roleId)?.name ?? "Unknown Role",
-        joined: user.createdAt,
-      })),
-    [users, roles]
+    []
   );
 
   const handleAddUser = useCallback(() => {
@@ -287,6 +296,15 @@ export default function UsersTable() {
       deleteUserMutation.mutate(selectedUser.id);
     }
   }, [selectedUser, deleteUserMutation]);
+
+  const handlePageChange = useCallback((page: number) => {
+    setCurrentPage(page);
+  }, []);
+
+  const handleSearchChange = useCallback((search: string) => {
+    setSearchQuery(search);
+    setCurrentPage(1);
+  }, []);
 
   return (
     <div className="py-5 flex flex-col gap-5">
@@ -302,7 +320,12 @@ export default function UsersTable() {
         isLoading={usersLoading || rolesLoading}
         error={usersError || rolesError}
         searchPlaceholder="Search by name..."
-        filterableColumns={["user"]}
+        serverSidePagination
+        currentPage={currentPage}
+        totalPages={usersResponse?.pages ?? 1}
+        onPageChange={handlePageChange}
+        onSearchChange={handleSearchChange}
+        searchValue={searchQuery}
         filterAction={
           <Button
             onClick={handleAddUser}
