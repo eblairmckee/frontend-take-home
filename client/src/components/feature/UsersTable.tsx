@@ -257,6 +257,8 @@ export default function UsersTable() {
     },
     onError: (error: Error) => {
       setError(error.message);
+      setIsDeleteUserDialogOpen(false);
+      setSelectedUser(undefined);
     },
   });
 
@@ -287,7 +289,7 @@ export default function UsersTable() {
   }, [selectedUser, deleteUserMutation]);
 
   return (
-    <div className="py-5">
+    <div className="py-5 flex flex-col gap-5">
       {error && (
         <Alert variant="destructive">
           <AlertTitle>Error</AlertTitle>

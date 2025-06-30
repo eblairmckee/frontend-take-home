@@ -1,7 +1,8 @@
 import { Toaster } from "@/components/ui/sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import UsersTable from "./components/feature/users/UsersTable";
+import RolesTable from "./components/feature/RolesTable";
+import UsersTable from "./components/feature/UsersTable";
 
 function App() {
   const queryClient = new QueryClient();
@@ -16,7 +17,9 @@ function App() {
           <TabsContent value="users">
             <UsersTable />
           </TabsContent>
-          <TabsContent value="roles">Roles</TabsContent>
+          <TabsContent value="roles">
+            <RolesTable />
+          </TabsContent>
         </Tabs>
         <Toaster />
       </div>
