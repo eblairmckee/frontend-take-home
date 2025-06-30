@@ -36,7 +36,7 @@ const buttonVariants = cva(
       },
       size: {
         default: "h-8 px-4 py-2 has-[>svg]:px-3",
-        sm: "h-8 rounded-sm gap-1.5 px-3 has-[>svg]:px-2.5",
+        sm: "h-6 rounded-sm gap-1.5 px-3 has-[>svg]:px-2.5 text-xs",
         lg: "h-10 rounded-sm px-6 has-[>svg]:px-4",
         icon: "size-9",
       },
@@ -55,6 +55,7 @@ function Button({
   asChild = false,
   startIcon,
   endIcon,
+  disabled,
   ...props
 }: React.ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
@@ -71,7 +72,10 @@ function Button({
         className={cn(
           buttonVariants({ variant, size, className }),
           startIcon && "pl-8",
-          endIcon && "pr-8"
+          endIcon && "pr-8",
+          disabled
+            ? "cursor-not-allowed bg-muted border-transparent text-muted-foreground"
+            : "cursor-pointer"
         )}
         {...props}
       />
