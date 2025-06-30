@@ -1,10 +1,4 @@
 import {
-  ArrowDownIcon,
-  ArrowUpIcon,
-  MagnifyingGlassIcon,
-  PlusIcon,
-} from "@radix-ui/react-icons";
-import {
   type ColumnDef,
   type ColumnFiltersState,
   flexRender,
@@ -15,7 +9,8 @@ import {
   type SortingState,
   useReactTable,
 } from "@tanstack/react-table";
-import React from "react";
+import { ArrowDownIcon, ArrowUpIcon, SearchIcon } from "lucide-react";
+import React, { useCallback } from "react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Skeleton } from "./ui/skeleton";
@@ -36,6 +31,7 @@ interface DataTableProps<TData, TValue> {
   searchPlaceholder: string;
   globalFilterEnabled?: boolean;
   filterableColumns?: string[]; // Column IDs that should have individual filters
+  filterAction?: React.ReactNode;
 }
 
 export function DataTable<TData, TValue>({
@@ -46,6 +42,7 @@ export function DataTable<TData, TValue>({
   searchPlaceholder,
   globalFilterEnabled = false,
   filterableColumns,
+  filterAction,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
@@ -69,8 +66,7 @@ export function DataTable<TData, TValue>({
       globalFilter,
     },
     globalFilterFn: globalFilterEnabled
-      ? (row, columnId, filterValue) => {
-          // Search across all visible cells with basic string matching
+      ? (row, _, filterValue) => {
           return row.getVisibleCells().some((cell) => {
             const cellValue = cell.getValue();
             if (cellValue == null) return false;
@@ -87,6 +83,23 @@ export function DataTable<TData, TValue>({
     },
   });
 
+  const handleFilterChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const value = event.target.value;
+      if (globalFilterEnabled) {
+        setGlobalFilter(value);
+      } else if (filterableColumns && filterableColumns.length > 0) {
+        // Apply the same filter value to all specified filterable columns
+        const newFilters = filterableColumns.map((columnId) => ({
+          id: columnId,
+          value: value,
+        }));
+        setColumnFilters(newFilters);
+      }
+    },
+    [globalFilterEnabled, filterableColumns]
+  );
+
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center h-48 text-center">
@@ -101,28 +114,16 @@ export function DataTable<TData, TValue>({
       <div className="flex gap-2 items-center">
         <Input
           placeholder={searchPlaceholder}
-          startIcon={<MagnifyingGlassIcon />}
+          startIcon={<SearchIcon className="w-4 h-4" />}
           className="flex-1"
           value={
             globalFilterEnabled
               ? (globalFilter ?? "")
               : ((columnFilters[0]?.value as string) ?? "")
           }
-          onChange={(event) => {
-            const value = event.target.value;
-            if (globalFilterEnabled) {
-              setGlobalFilter(value);
-            } else if (filterableColumns && filterableColumns.length > 0) {
-              // Apply the same filter value to all specified filterable columns
-              const newFilters = filterableColumns.map((columnId) => ({
-                id: columnId,
-                value: value,
-              }));
-              setColumnFilters(newFilters);
-            }
-          }}
+          onChange={handleFilterChange}
         />
-        <Button startIcon={<PlusIcon />}>Add User</Button>
+        {filterAction}
       </div>
       <div className="rounded-md border border-secondary-border">
         <Table>
@@ -169,7 +170,7 @@ export function DataTable<TData, TValue>({
                 <TableRow key={index}>
                   {columns.map((_, colIndex) => (
                     <TableCell key={colIndex}>
-                      <Skeleton className="h-6 w-full" />
+                      <Skeleton className="h-6 w-1/2 my-1.5 mx-2" />
                     </TableCell>
                   ))}
                 </TableRow>
