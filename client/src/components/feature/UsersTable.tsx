@@ -46,7 +46,7 @@ const DeleteUserDialog = ({
   }
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>Delete user</DialogTitle>
           <DialogDescription>

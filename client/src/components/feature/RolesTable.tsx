@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -25,91 +24,153 @@ import type {
   Role,
 } from "@workos/frontend-take-home-server/src/models";
 import { EllipsisVerticalIcon, PlusIcon } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { Label } from "../ui/label";
+import { Switch } from "../ui/switch";
+import { Textarea } from "../ui/textarea";
 
-const RenameRoleDialog = ({
-  role,
+const EditRoleDialog = ({
+  id,
   open,
   onOpenChange,
   onSubmit,
   isLoading,
 }: {
-  role?: Role;
+  id?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (name: string, description?: string) => void;
+  onSubmit: (name: string, description?: string, isDefault?: boolean) => void;
   isLoading?: boolean;
 }) => {
+  const {
+    data: role,
+    isLoading: isRoleLoading,
+    error: roleError,
+  } = useQuery<Role>({
+    queryKey: ["roles", id],
+    queryFn: async () => {
+      const response = await fetch(`http://localhost:3002/roles/${id}`);
+      return response.json();
+    },
+  });
   const [name, setName] = useState(role?.name || "");
   const [description, setDescription] = useState(role?.description || "");
+  const [isDefault, setIsDefault] = useState(role?.isDefault);
+
+  useEffect(() => {
+    if (role) {
+      setName(role.name);
+      setDescription(role.description || "");
+      setIsDefault(role.isDefault);
+    }
+  }, [role]);
 
   const handleSubmit = useCallback(() => {
     if (name.trim()) {
-      onSubmit(name.trim(), description.trim() || undefined);
+      onSubmit(name.trim(), description.trim(), isDefault);
     }
-  }, [name, description, onSubmit]);
+  }, [name, description, isDefault, onSubmit]);
 
-  if (!role) {
-    return null;
+  const handleOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open) {
+        setName("");
+        setDescription("");
+        setIsDefault(false);
+      }
+      onOpenChange(open);
+    },
+    [onOpenChange]
+  );
+
+  if (roleError) {
+    return (
+      <Alert variant="destructive">
+        <AlertTitle>Error</AlertTitle>
+        <AlertDescription>Role not found</AlertDescription>
+      </Alert>
+    );
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Rename role</DialogTitle>
-          <DialogDescription>
-            Update the name and description for the role{" "}
-            <span className="font-bold">{role.name}</span>.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div>
-            <label htmlFor="role-name" className="text-sm font-medium">
-              Name
-            </label>
-            <Input
-              id="role-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Enter role name"
-              disabled={isLoading}
-            />
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      {isRoleLoading ? (
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Loading...</DialogTitle>
+          </DialogHeader>
+        </DialogContent>
+      ) : role ? (
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>
+              <span className="text-secondary-foreground font-medium">
+                Editing the <span className="text-foreground">{role.name}</span>{" "}
+                role
+              </span>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div className="flex items-center gap-1">
+              <Label htmlFor="role-name" className="w-[140px]">
+                Name
+              </Label>
+              <Input
+                id="role-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Frontend Engineer"
+                disabled={isLoading}
+                className="flex-1"
+              />
+            </div>
+            <div className="flex items-center gap-1">
+              <Label htmlFor="role-description" className="w-[140px]">
+                Description
+              </Label>
+              <Textarea
+                id="role-description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Builds all the things, considered legendary among their peers..."
+                disabled={isLoading}
+                className="flex-1"
+              />
+            </div>
+            <div className="flex items-center gap-1">
+              <Label htmlFor="role-is-default" className="w-[140px]">
+                Make default role
+              </Label>
+              <Switch
+                id="role-is-default"
+                checked={isDefault}
+                onCheckedChange={setIsDefault}
+                disabled={isLoading}
+              />
+            </div>
           </div>
-          <div>
-            <label htmlFor="role-description" className="text-sm font-medium">
-              Description
-            </label>
-            <Input
-              id="role-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Enter role description"
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => onOpenChange(false)}
               disabled={isLoading}
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={isLoading}
-          >
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} disabled={isLoading}>
-            {isLoading ? "Saving..." : "Save changes"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSubmit} disabled={isLoading}>
+              {isLoading ? "Saving..." : "Save changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      ) : null}
     </Dialog>
   );
 };
 
 type RoleRow = {
   role: Role;
-  created: string;
+  updated: string;
 };
 
 const RoleCell = ({ role }: { role: Role }) => {
@@ -130,17 +191,17 @@ const RoleCell = ({ role }: { role: Role }) => {
   );
 };
 
-const ActionMenu = ({ onRename }: { onRename: () => void }) => {
+const ActionMenu = ({ onEdit }: { onEdit: () => void }) => {
   const [isOpen, setIsOpen] = useState(false);
 
   const onSelectItem = useCallback(
     (item: string) => {
       setIsOpen(false);
-      if (item === "rename") {
-        onRename();
+      if (item === "edit") {
+        onEdit();
       }
     },
-    [onRename]
+    [onEdit]
   );
 
   return (
@@ -153,8 +214,8 @@ const ActionMenu = ({ onRename }: { onRename: () => void }) => {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent>
-        <DropdownMenuItem onSelect={() => onSelectItem("rename")}>
-          Rename role
+        <DropdownMenuItem onSelect={() => onSelectItem("edit")}>
+          Edit Role
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -162,8 +223,10 @@ const ActionMenu = ({ onRename }: { onRename: () => void }) => {
 };
 
 export default function RolesTable() {
-  const [isRenameRoleDialogOpen, setIsRenameRoleDialogOpen] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<Role | undefined>(undefined);
+  const [isEditRoleDialogOpen, setIsEditRoleDialogOpen] = useState(false);
+  const [selectedRoleId, setSelectedRoleId] = useState<string | undefined>(
+    undefined
+  );
   const [error, setError] = useState<string | undefined>(undefined);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
@@ -192,16 +255,46 @@ export default function RolesTable() {
     },
   });
 
-  const renameRoleMutation = useMutation({
+  const currentDefaultRole = useMemo(() => {
+    return rolesResponse?.data.find((role) => role.isDefault);
+  }, [rolesResponse]);
+
+  const updateRoleMutation = useMutation({
     mutationFn: async ({
       roleId,
       name,
       description,
+      isDefault,
+      updatedAt,
     }: {
       roleId: string;
-      name: string;
+      name?: string;
       description?: string;
+      isDefault?: boolean;
+      updatedAt: string;
     }) => {
+      if (
+        isDefault &&
+        currentDefaultRole &&
+        isDefault !== currentDefaultRole?.isDefault
+      ) {
+        const response = await fetch(
+          `http://localhost:3002/roles/${currentDefaultRole?.id}`,
+          {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              isDefault: false,
+            }),
+          }
+        );
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || "Failed to update default role");
+        }
+      }
       const response = await fetch(`http://localhost:3002/roles/${roleId}`, {
         method: "PATCH",
         headers: {
@@ -210,27 +303,29 @@ export default function RolesTable() {
         body: JSON.stringify({
           name,
           description,
+          isDefault,
+          updatedAt,
         }),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to rename role");
+        throw new Error(errorData.message || "Failed to update role");
       }
 
       return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["roles"] });
-      setIsRenameRoleDialogOpen(false);
-      setSelectedRole(undefined);
+      setIsEditRoleDialogOpen(false);
+      setSelectedRoleId(undefined);
       setError(undefined);
-      toast.success("Role renamed successfully");
+      toast.success("Role updated successfully");
     },
     onError: (error: Error) => {
       setError(error.message);
-      setIsRenameRoleDialogOpen(false);
-      setSelectedRole(undefined);
+      setIsEditRoleDialogOpen(false);
+      setSelectedRoleId(undefined);
     },
   });
 
@@ -240,7 +335,7 @@ export default function RolesTable() {
     () =>
       roles.map((role) => ({
         role,
-        created: role.createdAt,
+        updated: role.updatedAt,
       })),
     [roles]
   );
@@ -265,13 +360,13 @@ export default function RolesTable() {
         },
       },
       {
-        accessorKey: "created",
-        header: "Created",
+        accessorKey: "updated",
+        header: "Last Updated",
         cell: ({ row }) => {
           const roleRow = row.original;
           return (
             <div>
-              {new Date(roleRow.created).toLocaleDateString("en-US", {
+              {new Date(roleRow.updated).toLocaleDateString("en-US", {
                 month: "short",
                 day: "numeric",
                 year: "numeric",
@@ -280,8 +375,8 @@ export default function RolesTable() {
           );
         },
         sortingFn: (rowA, rowB) => {
-          const dateA = new Date(rowA.original.created);
-          const dateB = new Date(rowB.original.created);
+          const dateA = new Date(rowA.original.updated);
+          const dateB = new Date(rowB.original.updated);
           return dateA.getTime() - dateB.getTime();
         },
       },
@@ -292,9 +387,9 @@ export default function RolesTable() {
           const roleRow = row.original;
           return (
             <ActionMenu
-              onRename={() => {
-                setSelectedRole(roleRow.role);
-                setIsRenameRoleDialogOpen(true);
+              onEdit={() => {
+                setSelectedRoleId(roleRow.role.id);
+                setIsEditRoleDialogOpen(true);
               }}
             />
           );
@@ -311,17 +406,19 @@ export default function RolesTable() {
     console.log("add role");
   }, []);
 
-  const handleRenameRole = useCallback(
-    (name: string, description?: string) => {
-      if (selectedRole) {
-        renameRoleMutation.mutate({
-          roleId: selectedRole.id,
+  const handleUpdateRole = useCallback(
+    (name: string, description?: string, isDefault?: boolean) => {
+      if (selectedRoleId) {
+        updateRoleMutation.mutate({
+          roleId: selectedRoleId,
           name,
           description,
+          isDefault,
+          updatedAt: new Date().toISOString(),
         });
       }
     },
-    [selectedRole, renameRoleMutation]
+    [selectedRoleId, updateRoleMutation]
   );
 
   const handlePageChange = useCallback((page: number) => {
@@ -362,12 +459,12 @@ export default function RolesTable() {
           </Button>
         }
       />
-      <RenameRoleDialog
-        role={selectedRole}
-        open={isRenameRoleDialogOpen}
-        onOpenChange={setIsRenameRoleDialogOpen}
-        onSubmit={handleRenameRole}
-        isLoading={renameRoleMutation.isPending}
+      <EditRoleDialog
+        id={selectedRoleId}
+        open={isEditRoleDialogOpen}
+        onOpenChange={setIsEditRoleDialogOpen}
+        onSubmit={handleUpdateRole}
+        isLoading={updateRoleMutation.isPending}
       />
     </div>
   );
